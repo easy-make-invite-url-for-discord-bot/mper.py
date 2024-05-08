@@ -19,7 +19,7 @@ mper /user/freewifi/test_bot/ 12345678990
 ```
 
 ## ライセンス
-このツールはMITライセンスのもとで公開されています。
+このツールはMITライセンスのもとで公開されています。　　
 複製、編集、再公開は基本的に全て許可されています。
 
 ## 質問や不具合の報告方法
@@ -32,5 +32,5 @@ mper /user/freewifi/test_bot/ 12345678990
  - 質問がある場合にお使いください
 
 ### クレジット
-mper.py 開発責任者 @FreeWiFi7749
+mper.py 開発責任者 @FreeWiFi7749　　
   issues管理責任者 @FreeWiFi7749
