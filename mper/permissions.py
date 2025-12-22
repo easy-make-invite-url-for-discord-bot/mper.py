@@ -144,18 +144,46 @@ METHOD_TO_PERMISSIONS = {
     "delete_scheduled_event": ["manage_events"],
 }
 
-# Decorator names that indicate permission requirements
+# Decorator names that indicate permission requirements (user-side)
 PERMISSION_DECORATORS = [
     "has_permissions",
-    "bot_has_permissions",
     "has_guild_permissions",
+]
+
+# Decorator names that indicate bot permission requirements
+BOT_PERMISSION_DECORATORS = [
+    "bot_has_permissions",
     "bot_has_guild_permissions",
 ]
 
-# app_commands permission decorators
+# app_commands permission decorators (user-side)
 APP_COMMAND_PERMISSION_DECORATORS = [
     "has_permissions",
+]
+
+# app_commands bot permission decorators
+APP_COMMAND_BOT_PERMISSION_DECORATORS = [
     "bot_has_permissions",
+]
+
+# Decorators that can contain nested permission checks
+WRAPPER_DECORATORS = [
+    "check_any",
+    "check",
+]
+
+# Permission object class names that may contain permission keywords
+PERMISSION_CLASSES = [
+    "Permissions",
+    "PermissionOverwrite",
+]
+
+# Attribute names that indicate permission access
+PERMISSION_ATTRIBUTES = [
+    "guild_permissions",
+    "permissions",
+    "app_permissions",
+    "resolved_permissions",
 ]
 
 
