@@ -427,6 +427,72 @@ def scan_directory(
     }
 
 
+def scan_directory_with_progress(
+    directory: str,
+    exclude_dirs: Set[str],
+    include_inferred: bool,
+    progress,
+    task_id,
+    python_files: List[str]
+) -> Dict[str, Any]:
+    """
+    Scan a directory with progress bar support.
+
+    This is a variant of scan_directory that updates a Rich progress bar.
+    """
+    all_method_calls: List[Tuple[str, MethodCall]] = []
+    user_permissions: Set[str] = set()
+    bot_permissions: Set[str] = set()
+    inferred_permissions: Set[str] = set()
+    all_warnings: List[str] = []
+    files_scanned = 0
+    files_with_errors = 0
+
+    for file_path in python_files:
+        files_scanned += 1
+
+        # Update progress bar
+        rel_path = os.path.basename(file_path)
+        progress.update(task_id, advance=1, current_file=rel_path)
+
+        result = scan_file(file_path)
+
+        # Collect method calls with file path
+        for call in result['method_calls']:
+            all_method_calls.append((file_path, call))
+
+        user_permissions.update(result['user_permissions'])
+        bot_permissions.update(result['bot_permissions'])
+        inferred_permissions.update(result['inferred_permissions'])
+
+        if result['warnings']:
+            files_with_errors += 1
+            all_warnings.extend(result['warnings'])
+
+    # Build evidence dictionary
+    evidence: Dict[str, List[Tuple[str, MethodCall]]] = {}
+    for file_path, call in all_method_calls:
+        for perm in call.permissions:
+            if perm not in evidence:
+                evidence[perm] = []
+            evidence[perm].append((file_path, call))
+
+    # Calculate invite link permissions
+    invite_link_permissions = inferred_permissions | bot_permissions
+
+    return {
+        'method_calls': all_method_calls,
+        'inferred_permissions': inferred_permissions,
+        'bot_permissions': bot_permissions,
+        'user_permissions': user_permissions,
+        'invite_link_permissions': invite_link_permissions,
+        'evidence': evidence,
+        'warnings': all_warnings,
+        'files_scanned': files_scanned,
+        'files_with_errors': files_with_errors,
+    }
+
+
 def calculate_permissions(permission_names: Set[str]) -> int:
     """Calculate the combined permission integer from permission names."""
     return calculate_permission_integer(permission_names)
@@ -572,6 +638,7 @@ Examples:
   mper /path/to/bot 123456789012345678 --verbose
   mper /path/to/bot 123456789012345678 --no-inferred
   mper /path/to/bot 123456789012345678 --scope bot --scope applications.commands
+  mper /path/to/bot 123456789012345678 --plain
         """
     )
     parser.add_argument('directory', type=str, help='Directory to scan')
@@ -611,28 +678,75 @@ Examples:
         action='store_true',
         help='Print a detailed permissions report'
     )
+    parser.add_argument(
+        '--no-color',
+        action='store_true',
+        help='Disable colored output'
+    )
+    parser.add_argument(
+        '--plain',
+        action='store_true',
+        help='Use plain text output (no styling or animations)'
+    )
 
     args = parser.parse_args()
 
+    # Initialize styled output
+    from .cli_output import StyledOutput
+    output = StyledOutput(no_color=args.no_color, plain=args.plain)
+
+    # Print banner
+    output.print_banner()
+
     # Validate directory
     if not os.path.isdir(args.directory):
-        print(f"Error: '{args.directory}' is not a valid directory", file=sys.stderr)
+        output.print_error(f"'{args.directory}' is not a valid directory")
         sys.exit(1)
 
     # Build exclude set
     exclude_dirs = DEFAULT_EXCLUDE_DIRS.copy()
     exclude_dirs.update(args.exclude)
 
-    # Scan directory
-    result = scan_directory(
-        args.directory,
-        exclude_dirs=exclude_dirs,
-        include_inferred=not args.no_inferred,
-        verbose=args.verbose
-    )
+    # Count files first for progress bar
+    python_files = []
+    for root, dirs, files in os.walk(args.directory):
+        dirs[:] = [d for d in dirs if d not in exclude_dirs]
+        for file in files:
+            if file.endswith('.py'):
+                python_files.append(os.path.join(root, file))
+
+    # Scan with progress bar
+    output.print_scanning_start(args.directory)
+
+    progress = output.create_progress()
+    if progress:
+        with progress:
+            task = progress.add_task(
+                "Scanning files...",
+                total=len(python_files),
+                current_file=""
+            )
+            result = scan_directory_with_progress(
+                args.directory,
+                exclude_dirs=exclude_dirs,
+                include_inferred=not args.no_inferred,
+                progress=progress,
+                task_id=task,
+                python_files=python_files
+            )
+    else:
+        # Plain mode - use regular scan
+        result = scan_directory(
+            args.directory,
+            exclude_dirs=exclude_dirs,
+            include_inferred=not args.no_inferred,
+            verbose=args.verbose
+        )
+
+    # Print scan completion
+    output.print_scan_complete(result['files_scanned'], result['files_with_errors'])
 
     # Calculate bot permissions for invite link
-    # Use invite_link_permissions (method-based + @bot_has_permissions)
     total_permissions = calculate_permissions(result['invite_link_permissions'])
 
     # Generate invite link
@@ -641,15 +755,49 @@ Examples:
     # Write to file
     write_invite_link_to_file(invite_link, args.output)
 
-    # Output
+    # Output results
     if args.report:
-        print(format_permissions_report(result))
+        # Show detailed evidence table
+        evidence = result.get('evidence', {})
+        if evidence:
+            output.print_permissions_table(evidence)
 
-    print(f"Generated Discord invite link: {invite_link}")
-    print(f"Invite link saved to: {args.output}")
+        # Show supplementary permissions
+        if result.get('bot_permissions'):
+            output.print_permissions_list(
+                result['bot_permissions'],
+                "Explicit Bot Permissions",
+                "from @bot_has_permissions - SUPPLEMENTARY",
+                style="blue"
+            )
 
-    if result['warnings'] and not args.report:
-        print(f"\nNote: {len(result['warnings'])} warning(s) encountered. Use --report for details.")
+        # Show user permissions (reference only)
+        if result.get('user_permissions'):
+            output.print_permissions_list(
+                result['user_permissions'],
+                "User Permissions",
+                "from @has_permissions - NOT for invite link",
+                style="yellow"
+            )
+
+    # Print summary
+    output.print_summary(
+        len(result.get('inferred_permissions', set())),
+        len(result.get('bot_permissions', set())),
+        len(result.get('user_permissions', set())),
+        total_permissions
+    )
+
+    # Print warnings
+    output.print_warnings(result.get('warnings', []))
+
+    # Print invite link
+    output.print_invite_link(
+        invite_link,
+        result['invite_link_permissions'],
+        total_permissions,
+        args.output
+    )
 
 
 if __name__ == "__main__":
