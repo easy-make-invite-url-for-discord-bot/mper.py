@@ -4,49 +4,67 @@ mper.py - Discord Bot Permission Scanner
 Scans Python code to detect required Discord permissions and generates
 bot invite links with the appropriate permission bits.
 
-Detection methods:
-1. Decorator-based detection (primary, most accurate):
-   - @commands.has_permissions(...) - User permission requirements
-   - @commands.bot_has_permissions(...) - Bot permission requirements
-   - @commands.has_guild_permissions(...) - User guild permission requirements
-   - @commands.bot_has_guild_permissions(...) - Bot guild permission requirements
-   - @app_commands.checks.has_permissions(...) - App command user permissions
-   - @app_commands.checks.bot_has_permissions(...) - App command bot permissions
-   - @app_commands.default_permissions(...) - Default command permissions
-   - @commands.check_any(...) - Nested permission checks
-   - @commands.check(...) - Custom permission checks with guild_permissions
+Detection methods (in order of priority):
 
-2. Permission object detection:
-   - discord.Permissions(...) - Permission object construction
-   - Permissions.update(...) - Permission updates
-   - PermissionOverwrite(...) - Channel permission overwrites
-   - guild_permissions.<perm> / permissions_for(...).<perm> - Permission attribute access
+1. Method-based detection (PRIMARY - for invite link):
+   - Detects discord.py method calls and infers required BOT permissions
+   - e.g., member.ban() -> ban_members, channel.purge() -> manage_messages
+   - Tracks call sites (file, line, method) as evidence
+   - Uses receiver type hints for better accuracy (member.ban vs guild.ban)
 
-3. Method-based heuristics (secondary, best-effort):
-   - Maps discord.py method calls to likely required permissions
-   - e.g., .ban() -> ban_members, .kick() -> kick_members
+2. @bot_has_permissions decorator (SUPPLEMENTARY):
+   - Explicit bot permission declarations by the developer
+   - Added to invite link permissions
+
+3. @has_permissions decorator (USER REQUIREMENTS ONLY):
+   - These are USER permission requirements, NOT bot permissions
+   - NOT included in invite link (user permissions != bot permissions)
+   - Shown in report for reference only
+
+The invite link is generated from:
+- Method-based inferred permissions (what the bot actually does)
+- @bot_has_permissions declarations (explicit bot requirements)
 """
 
 import os
 import argparse
 import ast
 import sys
-from typing import Set, Dict, List, Any
+from dataclasses import dataclass, field
+from typing import Set, Dict, List, Any, Tuple
 
 from .permissions import (
-    PERMISSIONS,
-    PERMISSION_ALIASES,
-    METHOD_TO_PERMISSIONS,
+    MEMBER_EDIT_KWARGS_PERMISSIONS,
     PERMISSION_DECORATORS,
     APP_COMMAND_PERMISSION_DECORATORS,
     BOT_PERMISSION_DECORATORS,
     APP_COMMAND_BOT_PERMISSION_DECORATORS,
     WRAPPER_DECORATORS,
-    PERMISSION_CLASSES,
-    PERMISSION_ATTRIBUTES,
     get_permission_value,
+    get_permissions_from_method,
+    infer_receiver_type,
     calculate_permission_integer,
+    resolve_permission_name,
 )
+
+
+@dataclass
+class MethodCall:
+    """Represents a detected method call that requires permissions."""
+    method_name: str
+    receiver_hint: str | None
+    line_number: int
+    permissions: List[str]
+    confidence: str
+    description: str
+    kwargs: List[str] = field(default_factory=list)
+    
+    @property
+    def call_chain(self) -> str:
+        """Get the full call chain (e.g., 'member.ban')."""
+        if self.receiver_hint:
+            return f"{self.receiver_hint}.{self.method_name}"
+        return self.method_name
 
 # Directories to exclude by default
 DEFAULT_EXCLUDE_DIRS = {
@@ -72,15 +90,25 @@ DEFAULT_EXCLUDE_DIRS = {
 
 
 class PermissionVisitor(ast.NodeVisitor):
-    """AST visitor to extract permission requirements from Python code."""
+    """AST visitor to extract permission requirements from Python code.
     
-    def __init__(self):
-        # Separate user and bot permissions for clarity
-        self.user_permissions: Set[str] = set()  # User permission requirements
-        self.bot_permissions: Set[str] = set()   # Bot permission requirements
-        self.inferred_permissions: Set[str] = set()  # From method calls (heuristic)
-        self.permission_objects: Set[str] = set()  # From Permissions() construction
-        self.attribute_permissions: Set[str] = set()  # From guild_permissions.X access
+    PRIMARY detection: Method calls (what the bot actually does)
+    SUPPLEMENTARY: @bot_has_permissions decorators (explicit declarations)
+    REFERENCE ONLY: @has_permissions decorators (user requirements, not for invite)
+    """
+    
+    def __init__(self, file_path: str = ""):
+        self.file_path = file_path
+        
+        # PRIMARY: Method-based detection (for invite link)
+        self.method_calls: List[MethodCall] = []
+        
+        # SUPPLEMENTARY: @bot_has_permissions (for invite link)
+        self.bot_permissions: Set[str] = set()
+        
+        # REFERENCE ONLY: @has_permissions (NOT for invite link)
+        self.user_permissions: Set[str] = set()
+        
         self.warnings: List[str] = []
     
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
@@ -105,10 +133,8 @@ class PermissionVisitor(ast.NodeVisitor):
             
             # Check for wrapper decorators that may contain nested permission checks
             if decorator_name in WRAPPER_DECORATORS:
-                # Recursively check all arguments for nested permission decorators
                 for arg in decorator.args:
                     self._extract_permissions_from_decorator(arg, is_bot)
-                # Also check keyword arguments
                 for keyword in decorator.keywords:
                     if keyword.value:
                         self._extract_permissions_from_decorator(keyword.value, is_bot)
@@ -126,11 +152,9 @@ class PermissionVisitor(ast.NodeVisitor):
             )
             
             if is_bot_decorator or is_user_decorator:
-                # Extract keyword arguments (permission names)
                 for keyword in decorator.keywords:
                     if keyword.arg is not None:
                         perm_name = keyword.arg.lower()
-                        # Check if the value is True (or a truthy constant)
                         if self._is_truthy_value(keyword.value):
                             if is_bot_decorator:
                                 self._add_permission(perm_name, self.bot_permissions)
@@ -144,102 +168,119 @@ class PermissionVisitor(ast.NodeVisitor):
         elif isinstance(node, ast.NameConstant):  # Python 3.7 compat
             return bool(node.value)
         elif isinstance(node, ast.Name):
-            # Variable reference - assume it might be True
             return True
-        return True  # Default to True for complex expressions
+        return True
     
     def _get_decorator_name(self, node: ast.expr) -> str:
         """Get the name of a decorator from its AST node."""
         if isinstance(node, ast.Name):
             return node.id
         elif isinstance(node, ast.Attribute):
-            # Handle commands.has_permissions, app_commands.checks.has_permissions, etc.
             return node.attr
         return ""
     
     def _add_permission(self, perm_name: str, target_set: Set[str]) -> None:
         """Add a permission to the target set, resolving aliases if needed."""
-        perm_lower = perm_name.lower()
-        
-        if perm_lower in PERMISSIONS:
-            target_set.add(perm_lower)
-        elif perm_lower in PERMISSION_ALIASES:
-            canonical = PERMISSION_ALIASES[perm_lower]
-            target_set.add(canonical)
+        resolved = resolve_permission_name(perm_name)
+        if resolved:
+            target_set.add(resolved)
         else:
             self.warnings.append(f"Unknown permission: {perm_name}")
     
+    def _get_receiver_hint(self, node: ast.expr) -> str | None:
+        """Try to infer the receiver type from an AST node."""
+        if isinstance(node, ast.Name):
+            return infer_receiver_type(node.id)
+        elif isinstance(node, ast.Attribute):
+            # Check the attribute name (e.g., ctx.author -> "author" -> "member")
+            hint = infer_receiver_type(node.attr)
+            if hint:
+                return hint
+            # Recursively check the value
+            return self._get_receiver_hint(node.value)
+        elif isinstance(node, ast.Call):
+            # Check for patterns like guild.get_member(...).ban()
+            if isinstance(node.func, ast.Attribute):
+                func_name = node.func.attr
+                # Common patterns that return specific types
+                if func_name in ['get_member', 'fetch_member']:
+                    return 'member'
+                elif func_name in ['get_channel', 'fetch_channel']:
+                    return 'channel'
+                elif func_name in ['get_role']:
+                    return 'role'
+        return None
+    
     def visit_Call(self, node: ast.Call) -> None:
-        """Visit function calls to detect discord.py method usage and Permissions objects."""
-        func_name = self._get_call_name(node.func)
-        
+        """Visit function calls to detect discord.py method usage."""
         if isinstance(node.func, ast.Attribute):
             method_name = node.func.attr
+            receiver_hint = self._get_receiver_hint(node.func.value)
             
-            # Check if this method maps to permissions (heuristic)
-            if method_name in METHOD_TO_PERMISSIONS:
-                perms = METHOD_TO_PERMISSIONS[method_name]
-                for perm in perms:
-                    self.inferred_permissions.add(perm)
+            # Get kwargs for special handling (e.g., member.edit)
+            kwargs = [kw.arg for kw in node.keywords if kw.arg]
             
-            # Check for Permissions.update() calls
-            if method_name == 'update':
-                for keyword in node.keywords:
-                    if keyword.arg and self._is_truthy_value(keyword.value):
-                        self._add_permission(keyword.arg, self.permission_objects)
-            
-            # Check for discord.Permissions() or discord.PermissionOverwrite() construction
-            if method_name in PERMISSION_CLASSES:
-                for keyword in node.keywords:
-                    if keyword.arg and self._is_truthy_value(keyword.value):
-                        self._add_permission(keyword.arg, self.permission_objects)
-        
-        elif isinstance(node.func, ast.Name):
-            # Check for Permissions() or PermissionOverwrite() construction (without module prefix)
-            if func_name in PERMISSION_CLASSES:
-                for keyword in node.keywords:
-                    if keyword.arg and self._is_truthy_value(keyword.value):
-                        self._add_permission(keyword.arg, self.permission_objects)
-        
-        self.generic_visit(node)
-    
-    def _get_call_name(self, node: ast.expr) -> str:
-        """Get the name of a function call from its AST node."""
-        if isinstance(node, ast.Name):
-            return node.id
-        elif isinstance(node, ast.Attribute):
-            return node.attr
-        return ""
-    
-    def visit_Attribute(self, node: ast.Attribute) -> None:
-        """Visit attribute access to detect guild_permissions.X patterns."""
-        # Check for patterns like: ctx.author.guild_permissions.manage_messages
-        # or interaction.permissions.ban_members
-        if isinstance(node.value, ast.Attribute):
-            parent_attr = node.value.attr
-            if parent_attr in PERMISSION_ATTRIBUTES:
-                # The current node.attr is the permission being checked
-                perm_name = node.attr.lower()
-                if perm_name in PERMISSIONS or perm_name in PERMISSION_ALIASES:
-                    self._add_permission(perm_name, self.attribute_permissions)
+            # Special handling for member.edit() with kwargs
+            if method_name == 'edit' and receiver_hint == 'member' and kwargs:
+                for kwarg in kwargs:
+                    if kwarg in MEMBER_EDIT_KWARGS_PERMISSIONS:
+                        perm, desc = MEMBER_EDIT_KWARGS_PERMISSIONS[kwarg]
+                        self.method_calls.append(MethodCall(
+                            method_name=f"edit:{kwarg}",
+                            receiver_hint=receiver_hint,
+                            line_number=node.lineno,
+                            permissions=[perm],
+                            confidence="high",
+                            description=desc,
+                            kwargs=[kwarg],
+                        ))
+            else:
+                # Standard method lookup
+                perms, confidence, desc = get_permissions_from_method(method_name, receiver_hint)
+                if perms:
+                    self.method_calls.append(MethodCall(
+                        method_name=method_name,
+                        receiver_hint=receiver_hint,
+                        line_number=node.lineno,
+                        permissions=perms,
+                        confidence=confidence,
+                        description=desc,
+                        kwargs=kwargs,
+                    ))
         
         self.generic_visit(node)
     
     @property
-    def declared_permissions(self) -> Set[str]:
-        """Combined declared permissions (for backward compatibility)."""
-        return self.user_permissions | self.bot_permissions
+    def inferred_permissions(self) -> Set[str]:
+        """All permissions inferred from method calls (PRIMARY for invite link)."""
+        perms = set()
+        for call in self.method_calls:
+            perms.update(call.permissions)
+        return perms
     
     @property
-    def all_detected_permissions(self) -> Set[str]:
-        """All detected permissions from all sources."""
-        return (
-            self.user_permissions |
-            self.bot_permissions |
-            self.inferred_permissions |
-            self.permission_objects |
-            self.attribute_permissions
-        )
+    def high_confidence_permissions(self) -> Set[str]:
+        """Only high-confidence permissions from method calls."""
+        perms = set()
+        for call in self.method_calls:
+            if call.confidence == "high":
+                perms.update(call.permissions)
+        return perms
+    
+    @property
+    def invite_link_permissions(self) -> Set[str]:
+        """Permissions for the invite link (method-based + @bot_has_permissions)."""
+        return self.inferred_permissions | self.bot_permissions
+    
+    def get_permission_evidence(self) -> Dict[str, List[MethodCall]]:
+        """Get evidence for each permission (which method calls require it)."""
+        evidence: Dict[str, List[MethodCall]] = {}
+        for call in self.method_calls:
+            for perm in call.permissions:
+                if perm not in evidence:
+                    evidence[perm] = []
+                evidence[perm].append(call)
+        return evidence
 
 
 def scan_file(file_path: str) -> Dict[str, Any]:
@@ -248,19 +289,21 @@ def scan_file(file_path: str) -> Dict[str, Any]:
     
     Returns:
         Dictionary containing:
-        - user_permissions: Set of user permission requirements (from @has_permissions)
-        - bot_permissions: Set of bot permission requirements (from @bot_has_permissions)
-        - inferred_permissions: Set of inferred permissions from method calls
-        - permission_objects: Set of permissions from Permissions() construction
-        - attribute_permissions: Set of permissions from guild_permissions.X access
+        - method_calls: List of MethodCall objects (PRIMARY - for invite link)
+        - inferred_permissions: Set of permissions from method calls (PRIMARY)
+        - bot_permissions: Set from @bot_has_permissions (SUPPLEMENTARY)
+        - user_permissions: Set from @has_permissions (REFERENCE ONLY)
+        - invite_link_permissions: Combined permissions for invite link
+        - evidence: Dict mapping permission -> list of method calls
         - warnings: List of warning messages
     """
     empty_result = {
-        'user_permissions': set(),
-        'bot_permissions': set(),
+        'method_calls': [],
         'inferred_permissions': set(),
-        'permission_objects': set(),
-        'attribute_permissions': set(),
+        'bot_permissions': set(),
+        'user_permissions': set(),
+        'invite_link_permissions': set(),
+        'evidence': {},
         'warnings': [],
     }
     
@@ -280,15 +323,16 @@ def scan_file(file_path: str) -> Dict[str, Any]:
         empty_result['warnings'] = [f"Syntax error in {file_path}: {e}"]
         return empty_result
     
-    visitor = PermissionVisitor()
+    visitor = PermissionVisitor(file_path)
     visitor.visit(tree)
     
     return {
-        'user_permissions': visitor.user_permissions,
-        'bot_permissions': visitor.bot_permissions,
+        'method_calls': visitor.method_calls,
         'inferred_permissions': visitor.inferred_permissions,
-        'permission_objects': visitor.permission_objects,
-        'attribute_permissions': visitor.attribute_permissions,
+        'bot_permissions': visitor.bot_permissions,
+        'user_permissions': visitor.user_permissions,
+        'invite_link_permissions': visitor.invite_link_permissions,
+        'evidence': visitor.get_permission_evidence(),
         'warnings': visitor.warnings,
     }
 
@@ -305,17 +349,17 @@ def scan_directory(
     Args:
         directory: Path to the directory to scan
         exclude_dirs: Set of directory names to exclude
-        include_inferred: Whether to include inferred permissions from method calls
+        include_inferred: Whether to include inferred permissions (always True for method-based)
         verbose: Whether to print detailed output
     
     Returns:
         Dictionary containing:
-        - user_permissions: Set of user permission requirements
-        - bot_permissions: Set of bot permission requirements (for invite link)
-        - inferred_permissions: Set of inferred permissions from method calls
-        - permission_objects: Set of permissions from Permissions() construction
-        - attribute_permissions: Set of permissions from guild_permissions.X access
-        - all_bot_permissions: Combined bot permissions for invite link
+        - method_calls: List of all MethodCall objects with file paths
+        - inferred_permissions: Set of permissions from method calls (PRIMARY)
+        - bot_permissions: Set from @bot_has_permissions (SUPPLEMENTARY)
+        - user_permissions: Set from @has_permissions (REFERENCE ONLY)
+        - invite_link_permissions: Combined permissions for invite link
+        - evidence: Dict mapping permission -> list of (file, method_call) tuples
         - warnings: List of warning messages
         - files_scanned: Number of files scanned
         - files_with_errors: Number of files with errors
@@ -323,11 +367,10 @@ def scan_directory(
     if exclude_dirs is None:
         exclude_dirs = DEFAULT_EXCLUDE_DIRS
     
+    all_method_calls: List[Tuple[str, MethodCall]] = []  # (file_path, method_call)
     user_permissions: Set[str] = set()
     bot_permissions: Set[str] = set()
     inferred_permissions: Set[str] = set()
-    permission_objects: Set[str] = set()
-    attribute_permissions: Set[str] = set()
     all_warnings: List[str] = []
     files_scanned = 0
     files_with_errors = 0
@@ -346,33 +389,38 @@ def scan_directory(
                 
                 result = scan_file(file_path)
                 
+                # Collect method calls with file path
+                for call in result['method_calls']:
+                    all_method_calls.append((file_path, call))
+                
                 user_permissions.update(result['user_permissions'])
                 bot_permissions.update(result['bot_permissions'])
                 inferred_permissions.update(result['inferred_permissions'])
-                permission_objects.update(result['permission_objects'])
-                attribute_permissions.update(result['attribute_permissions'])
                 
                 if result['warnings']:
                     files_with_errors += 1
                     all_warnings.extend(result['warnings'])
     
-    # Calculate bot permissions for invite link
-    # Bot permissions = explicit bot_has_permissions + inferred (if enabled)
-    all_bot_permissions = bot_permissions.copy()
-    if include_inferred:
-        all_bot_permissions.update(inferred_permissions)
+    # Build evidence dictionary: permission -> list of (file, method_call)
+    evidence: Dict[str, List[Tuple[str, MethodCall]]] = {}
+    for file_path, call in all_method_calls:
+        for perm in call.permissions:
+            if perm not in evidence:
+                evidence[perm] = []
+            evidence[perm].append((file_path, call))
     
-    # For backward compatibility
-    declared_permissions = user_permissions | bot_permissions
+    # Calculate invite link permissions
+    # PRIMARY: method-based inferred permissions
+    # SUPPLEMENTARY: @bot_has_permissions declarations
+    invite_link_permissions = inferred_permissions | bot_permissions
     
     return {
-        'user_permissions': user_permissions,
-        'bot_permissions': bot_permissions,
+        'method_calls': all_method_calls,
         'inferred_permissions': inferred_permissions,
-        'permission_objects': permission_objects,
-        'attribute_permissions': attribute_permissions,
-        'declared_permissions': declared_permissions,  # backward compat
-        'all_bot_permissions': all_bot_permissions,
+        'bot_permissions': bot_permissions,
+        'user_permissions': user_permissions,
+        'invite_link_permissions': invite_link_permissions,
+        'evidence': evidence,
         'warnings': all_warnings,
         'files_scanned': files_scanned,
         'files_with_errors': files_with_errors,
@@ -413,73 +461,102 @@ def write_invite_link_to_file(invite_link: str, file_path: str = 'bot_invite_url
         file.write(invite_link + '\n')
 
 
-def format_permissions_report(result: Dict) -> str:
-    """Format a human-readable permissions report."""
+def format_permissions_report(result: Dict, show_evidence: bool = True) -> str:
+    """Format a human-readable permissions report with evidence."""
     lines = []
-    lines.append("=" * 60)
+    lines.append("=" * 70)
     lines.append("Discord Bot Permission Scan Report")
-    lines.append("=" * 60)
+    lines.append("=" * 70)
     lines.append("")
     
     lines.append(f"Files scanned: {result['files_scanned']}")
     lines.append(f"Files with errors: {result['files_with_errors']}")
     lines.append("")
     
-    # Bot permissions (from @bot_has_permissions decorators)
-    if result.get('bot_permissions'):
-        lines.append("Bot Permissions (from @bot_has_permissions - for invite link):")
-        for perm in sorted(result['bot_permissions']):
-            value = get_permission_value(perm)
-            lines.append(f"  - {perm} (0x{value:X})")
+    # PRIMARY: Method-based permissions with evidence
+    evidence = result.get('evidence', {})
+    if evidence and show_evidence:
+        lines.append("-" * 70)
+        lines.append("DETECTED PERMISSIONS (from method calls - PRIMARY)")
+        lines.append("-" * 70)
         lines.append("")
-    
-    # User permissions (from @has_permissions decorators)
-    if result.get('user_permissions'):
-        lines.append("User Permissions (from @has_permissions - command requirements):")
-        for perm in sorted(result['user_permissions']):
+        
+        for perm in sorted(evidence.keys()):
             value = get_permission_value(perm)
-            lines.append(f"  - {perm} (0x{value:X})")
+            calls = evidence[perm]
+            lines.append(f"{perm} (0x{value:X}):")
+            
+            # Group by file for cleaner output
+            by_file: Dict[str, List[MethodCall]] = {}
+            for file_path, call in calls:
+                if file_path not in by_file:
+                    by_file[file_path] = []
+                by_file[file_path].append(call)
+            
+            for file_path, file_calls in by_file.items():
+                # Show relative path if possible
+                rel_path = os.path.basename(file_path)
+                for call in file_calls:
+                    chain = call.call_chain
+                    lines.append(f"  {rel_path}:{call.line_number} -> {chain}()")
+                    if call.description:
+                        lines.append(f"    [{call.confidence}] {call.description}")
+            lines.append("")
+    elif result.get('inferred_permissions'):
+        lines.append("-" * 70)
+        lines.append("DETECTED PERMISSIONS (from method calls - PRIMARY)")
+        lines.append("-" * 70)
         lines.append("")
-    
-    # Inferred permissions from method calls
-    if result.get('inferred_permissions'):
-        lines.append("Inferred Permissions (from method calls - best effort):")
         for perm in sorted(result['inferred_permissions']):
             value = get_permission_value(perm)
-            lines.append(f"  - {perm} (0x{value:X})")
+            lines.append(f"  {perm} (0x{value:X})")
         lines.append("")
     
-    # Permissions from Permissions() objects
-    if result.get('permission_objects'):
-        lines.append("Permissions from Objects (Permissions(), PermissionOverwrite()):")
-        for perm in sorted(result['permission_objects']):
+    # SUPPLEMENTARY: @bot_has_permissions
+    if result.get('bot_permissions'):
+        lines.append("-" * 70)
+        lines.append("EXPLICIT BOT PERMISSIONS (from @bot_has_permissions - SUPPLEMENTARY)")
+        lines.append("-" * 70)
+        lines.append("")
+        for perm in sorted(result['bot_permissions']):
             value = get_permission_value(perm)
-            lines.append(f"  - {perm} (0x{value:X})")
+            lines.append(f"  {perm} (0x{value:X})")
         lines.append("")
     
-    # Permissions from attribute access
-    if result.get('attribute_permissions'):
-        lines.append("Permissions from Attribute Access (guild_permissions.X):")
-        for perm in sorted(result['attribute_permissions']):
+    # REFERENCE ONLY: @has_permissions (NOT for invite link)
+    if result.get('user_permissions'):
+        lines.append("-" * 70)
+        lines.append("USER PERMISSIONS (from @has_permissions - NOT for invite link)")
+        lines.append("-" * 70)
+        lines.append("NOTE: These are USER requirements, not BOT requirements.")
+        lines.append("      They are NOT included in the invite link.")
+        lines.append("")
+        for perm in sorted(result['user_permissions']):
             value = get_permission_value(perm)
-            lines.append(f"  - {perm} (0x{value:X})")
+            lines.append(f"  {perm} (0x{value:X})")
         lines.append("")
     
     if result.get('warnings'):
-        lines.append("Warnings:")
-        for warning in result['warnings'][:10]:  # Limit to first 10
-            lines.append(f"  - {warning}")
+        lines.append("-" * 70)
+        lines.append("WARNINGS")
+        lines.append("-" * 70)
+        for warning in result['warnings'][:10]:
+            lines.append(f"  {warning}")
         if len(result['warnings']) > 10:
             lines.append(f"  ... and {len(result['warnings']) - 10} more warnings")
         lines.append("")
     
-    # Calculate bot permissions for invite link
-    bot_perms = result.get('all_bot_permissions', result.get('bot_permissions', set()))
-    total_perms = calculate_permissions(bot_perms)
-    lines.append("-" * 60)
-    lines.append("Bot Invite Link Permissions (bot_has_permissions + inferred):")
-    lines.append(f"  Permission Integer: {total_perms}")
-    lines.append(f"  Permission Hex: 0x{total_perms:X}")
+    # Final summary: Invite link permissions
+    invite_perms = result.get('invite_link_permissions', set())
+    total_perms = calculate_permissions(invite_perms)
+    lines.append("=" * 70)
+    lines.append("INVITE LINK PERMISSIONS")
+    lines.append("=" * 70)
+    lines.append("Source: method-based detection + @bot_has_permissions")
+    lines.append("")
+    lines.append(f"  Permissions: {', '.join(sorted(invite_perms)) if invite_perms else 'None'}")
+    lines.append(f"  Integer: {total_perms}")
+    lines.append(f"  Hex: 0x{total_perms:X}")
     lines.append("")
     
     return '\n'.join(lines)
@@ -555,8 +632,8 @@ Examples:
     )
     
     # Calculate bot permissions for invite link
-    # Use all_bot_permissions (bot_has_permissions + inferred if enabled)
-    total_permissions = calculate_permissions(result['all_bot_permissions'])
+    # Use invite_link_permissions (method-based + @bot_has_permissions)
+    total_permissions = calculate_permissions(result['invite_link_permissions'])
     
     # Generate invite link
     invite_link = create_invite_link(args.client_id, total_permissions, args.scope)
