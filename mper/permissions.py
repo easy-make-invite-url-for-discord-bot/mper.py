@@ -2,7 +2,7 @@
 # Based on Discord API Documentation (2025-12-22)
 # https://discord.com/developers/docs/topics/permissions
 
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 # All permissions with their bit values
 PERMISSIONS = {
@@ -290,7 +290,7 @@ PERMISSION_ATTRIBUTES = [
 ]
 
 
-def get_permission_value(name: str) -> int | None:
+def get_permission_value(name: str) -> Optional[int]:
     """Get the permission bit value for a given permission name."""
     name_lower = name.lower()
 
@@ -351,7 +351,7 @@ def get_member_edit_permissions(kwargs: List[str]) -> List[Tuple[str, str, str]]
     return results
 
 
-def infer_receiver_type(name: str) -> str | None:
+def infer_receiver_type(name: str) -> Optional[str]:
     """
     Try to infer the receiver type from a variable name.
 
@@ -384,7 +384,7 @@ def get_all_permission_names() -> List[str]:
     return list(PERMISSIONS.keys())
 
 
-def resolve_permission_name(name: str) -> str | None:
+def resolve_permission_name(name: str) -> Optional[str]:
     """Resolve a permission name to its canonical form."""
     name_lower = name.lower()
     if name_lower in PERMISSIONS:

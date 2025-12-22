@@ -31,7 +31,7 @@ import ast
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .permissions import (
     APP_COMMAND_BOT_PERMISSION_DECORATORS,
@@ -52,7 +52,7 @@ from .permissions import (
 class MethodCall:
     """Represents a detected method call that requires permissions."""
     method_name: str
-    receiver_hint: str | None
+    receiver_hint: Optional[str]
     line_number: int
     permissions: List[str]
     confidence: str
@@ -187,7 +187,7 @@ class PermissionVisitor(ast.NodeVisitor):
         else:
             self.warnings.append(f"Unknown permission: {perm_name}")
 
-    def _get_receiver_hint(self, node: ast.expr) -> str | None:
+    def _get_receiver_hint(self, node: ast.expr) -> Optional[str]:
         """Try to infer the receiver type from an AST node."""
         if isinstance(node, ast.Name):
             return infer_receiver_type(node.id)
