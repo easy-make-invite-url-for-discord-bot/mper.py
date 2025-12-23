@@ -6,6 +6,7 @@
 |----------|------|
 | `basic_usage.py` | 基本的な使い方（ディレクトリスキャン、招待URL生成） |
 | `custom_permissions.py` | パーミッション名を直接指定して招待URLを作成 |
+| `sample_bot/` | 実際のdiscord.py Botでmperを使う例 |
 
 ## 実行方法
 

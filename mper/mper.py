@@ -546,6 +546,9 @@ def generate_invite_url(
     """
     import os
 
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"指定されたパスが見つかりません: {path}")
+
     if os.path.isfile(path):
         result = scan_file(path)
     else:

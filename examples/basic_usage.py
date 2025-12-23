@@ -5,6 +5,8 @@ mper 基本的な使い方
 Discord Botの招待URLを生成する方法を示します。
 """
 
+import os
+
 import mper
 
 
@@ -51,7 +53,9 @@ def main():
     for perm, evidence_list in result.get('evidence', {}).items():
         print(f"\n{perm}:")
         for ev in evidence_list[:3]:  # 最初の3件だけ表示
-            print(f"  - {ev['file']}:{ev['line']} -> {ev['method_call']}")
+            file_path, method_call = ev  # タプルをアンパック
+            filename = os.path.basename(file_path)
+            print(f"  - {filename}:{method_call.line_number} -> {method_call.call_chain}()")
 
 
 if __name__ == "__main__":
