@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: PyPI
+    url: https://pypi.org/project/mper/
+    about: PyPIでmperを確認する
+  - name: Discord API Documentation
+    url: https://discord.com/developers/docs/topics/permissions
+    about: Discord APIのパーミッションについて

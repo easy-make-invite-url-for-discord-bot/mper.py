@@ -1,0 +1,44 @@
+name: Stale Issues
+
+on:
+  schedule:
+    # 毎日0:00 UTC
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    name: Close Stale Issues
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          # Issue設定
+          stale-issue-message: >
+            このIssueは60日間アクティビティがありません。
+            7日以内に更新がない場合、自動的にクローズされます。
+          close-issue-message: >
+            このIssueは長期間アクティビティがなかったため、クローズされました。
+            必要であれば、再度オープンしてください。
+          stale-issue-label: "stale"
+          days-before-issue-stale: 60
+          days-before-issue-close: 7
+          exempt-issue-labels: "pinned,security,bug,enhancement"
+          # PR設定
+          stale-pr-message: >
+            このPRは30日間アクティビティがありません。
+            7日以内に更新がない場合、自動的にクローズされます。
+          close-pr-message: >
+            このPRは長期間アクティビティがなかったため、クローズされました。
+            必要であれば、再度オープンしてください。
+          stale-pr-label: "stale"
+          days-before-pr-stale: 30
+          days-before-pr-close: 7
+          exempt-pr-labels: "pinned,dependencies"
+          # 共通設定
+          operations-per-run: 100

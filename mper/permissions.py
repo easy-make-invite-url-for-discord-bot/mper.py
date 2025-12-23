@@ -1,6 +1,12 @@
-# Discord Permission Flags
-# Based on Discord API Documentation (2025-12-22)
-# https://discord.com/developers/docs/topics/permissions
+"""
+Discord Permission Flags
+
+Discord APIのパーミッションフラグ定義と、discord.pyのメソッドから
+必要なパーミッションを推測するためのマッピング。
+
+Reference:
+    https://discord.com/developers/docs/topics/permissions
+"""
 
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -291,7 +297,15 @@ PERMISSION_ATTRIBUTES = [
 
 
 def get_permission_value(name: str) -> Optional[int]:
-    """Get the permission bit value for a given permission name."""
+    """
+    パーミッション名からビット値を取得する。
+
+    Args:
+        name: パーミッション名
+
+    Returns:
+        ビット値、存在しない場合はNone
+    """
     name_lower = name.lower()
 
     # Check canonical names first
@@ -370,7 +384,15 @@ def infer_receiver_type(name: str) -> Optional[str]:
 
 
 def calculate_permission_integer(permission_names: Set[str]) -> int:
-    """Calculate the combined permission integer from a set of permission names."""
+    """
+    パーミッション名のセットから統合パーミッション整数を計算する。
+
+    Args:
+        permission_names: パーミッション名のセット
+
+    Returns:
+        統合されたパーミッション整数
+    """
     total = 0
     for name in permission_names:
         value = get_permission_value(name)
@@ -380,12 +402,20 @@ def calculate_permission_integer(permission_names: Set[str]) -> int:
 
 
 def get_all_permission_names() -> List[str]:
-    """Get all canonical permission names."""
+    """全ての正規パーミッション名を取得する。"""
     return list(PERMISSIONS.keys())
 
 
 def resolve_permission_name(name: str) -> Optional[str]:
-    """Resolve a permission name to its canonical form."""
+    """
+    パーミッション名を正規形式に解決する。
+
+    Args:
+        name: パーミッション名（エイリアス可）
+
+    Returns:
+        正規パーミッション名、存在しない場合はNone
+    """
     name_lower = name.lower()
     if name_lower in PERMISSIONS:
         return name_lower
@@ -394,6 +424,5 @@ def resolve_permission_name(name: str) -> Optional[str]:
     return None
 
 
-# Legacy compatibility - keep the old 'permissions' dict name
-# but point to the new PERMISSIONS
+# 後方互換性のためのエイリアス
 permissions = PERMISSIONS

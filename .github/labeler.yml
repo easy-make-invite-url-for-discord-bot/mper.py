@@ -1,0 +1,58 @@
+# PRラベル自動付与ルール
+
+# ドキュメント
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "*.md"
+          - "docs/**"
+          - "LICENSE"
+
+# Python コード
+python:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.py"
+
+# メインパッケージ
+core:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "mper/**/*.py"
+
+# テスト
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+          - "pytest.ini"
+          - "conftest.py"
+
+# CI/CD
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+
+# 設定ファイル
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "pyproject.toml"
+          - "setup.py"
+          - "setup.cfg"
+          - ".ruff.toml"
+          - "ruff.toml"
+
+# 依存関係
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "pyproject.toml"
+          - "requirements*.txt"
+
+# サンプル
+examples:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "examples/**"

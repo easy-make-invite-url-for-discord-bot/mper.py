@@ -1,0 +1,89 @@
+name: バグ報告
+description: バグや不具合を報告する
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        バグ報告ありがとうございます。以下の項目をできるだけ詳しく記入してください。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: バグの説明
+      description: どのようなバグが発生しましたか？
+      placeholder: 具体的に説明してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 再現手順
+      description: バグを再現する手順を教えてください
+      placeholder: |
+        1. `mper /path/to/bot CLIENT_ID` を実行
+        2. ...
+        3. エラーが発生
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待される動作
+      description: 本来どのように動作すべきですか？
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の動作
+      description: 実際にはどのように動作しましたか？
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: エラーメッセージ
+      description: エラーメッセージがあれば貼り付けてください
+      render: shell
+
+  - type: input
+    id: mper-version
+    attributes:
+      label: mperのバージョン
+      description: "`pip show mper` で確認できます"
+      placeholder: "例: 1.1.1"
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Pythonのバージョン
+      description: "`python --version` で確認できます"
+      placeholder: "例: 3.10.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - その他
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 追加情報
+      description: その他、関連する情報があれば記入してください

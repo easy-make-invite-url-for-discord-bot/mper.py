@@ -1,11 +1,11 @@
 """
-Styled CLI output for mper using Rich library.
+mper CLIのスタイル付き出力
 
-Provides beautiful terminal output with:
-- Colored text and panels
-- Progress bars and spinners
-- Styled tables
-- Animated scanning feedback
+Richライブラリを使用した美しいターミナル出力:
+    - カラーテキストとパネル
+    - プログレスバーとスピナー
+    - スタイル付きテーブル
+    - アニメーションフィードバック
 """
 
 import sys
@@ -20,8 +20,8 @@ from rich.text import Text
 
 from .permissions import get_permission_value
 
-# Color scheme for permission categories
-PERMISSION_COLORS = {
+# パーミッションカテゴリ別の色スキーマ
+PERMISSION_COLORS: Dict[str, str] = {
     # Dangerous permissions (red)
     "administrator": "bold red",
     "ban_members": "red",
@@ -61,7 +61,8 @@ PERMISSION_COLORS = {
     "default": "white",
 }
 
-CONFIDENCE_COLORS = {
+# 信頼度別の色スキーマ
+CONFIDENCE_COLORS: Dict[str, str] = {
     "high": "green",
     "medium": "yellow",
     "low": "red",
@@ -70,7 +71,14 @@ CONFIDENCE_COLORS = {
 
 
 class StyledOutput:
-    """Handles styled CLI output using Rich."""
+    """
+    Richを使用したスタイル付きCLI出力を処理するクラス。
+
+    Attributes:
+        plain: プレーンテキストモード
+        no_color: 色なしモード
+        console: Rich Consoleインスタンス
+    """
 
     def __init__(self, no_color: bool = False, plain: bool = False):
         """
@@ -89,15 +97,16 @@ class StyledOutput:
 
         if not self.plain:
             self.console = Console(
-                force_terminal=not no_color,
+                force_terminal=True,
                 no_color=no_color,
                 highlight=False,
+                color_system="auto" if not no_color else None,
             )
         else:
             self.console = None
 
     def print_banner(self) -> None:
-        """Print the mper banner."""
+        """バナーを表示する。"""
         if self.plain:
             print("=" * 50)
             print("  mper - Discord Bot Permission Scanner")
@@ -118,7 +127,7 @@ class StyledOutput:
         self.console.print()
 
     def create_progress(self) -> Optional[Progress]:
-        """Create a progress bar for scanning."""
+        """スキャン用のプログレスバーを作成する。"""
         if self.plain:
             return None
 
@@ -133,7 +142,7 @@ class StyledOutput:
         )
 
     def print_scanning_start(self, directory: str) -> None:
-        """Print scanning start message."""
+        """スキャン開始メッセージを表示する。"""
         if self.plain:
             print(f"Scanning: {directory}")
             return
@@ -141,7 +150,7 @@ class StyledOutput:
         self.console.print(f"[bold blue]Scanning:[/] {directory}")
 
     def print_scanning_file(self, file_path: str) -> None:
-        """Print current file being scanned (for verbose mode without progress)."""
+        """現在スキャン中のファイルを表示する。"""
         if self.plain:
             print(f"  Scanning: {file_path}")
             return
@@ -149,7 +158,7 @@ class StyledOutput:
         self.console.print(f"  [dim]Scanning:[/] {file_path}")
 
     def print_scan_complete(self, files_scanned: int, files_with_errors: int) -> None:
-        """Print scan completion summary."""
+        """スキャン完了サマリーを表示する。"""
         if self.plain:
             print(f"\nScanned {files_scanned} files ({files_with_errors} with errors)")
             return
@@ -167,7 +176,7 @@ class StyledOutput:
         title: str = "Detected Permissions",
         subtitle: str = "from method calls - PRIMARY",
     ) -> None:
-        """Print permissions as a styled table with evidence."""
+        """パーミッションを証拠付きのスタイル付きテーブルで表示する。"""
         if self.plain:
             print(f"\n{title} ({subtitle})")
             print("-" * 50)
@@ -228,7 +237,7 @@ class StyledOutput:
         subtitle: str = "",
         style: str = "blue",
     ) -> None:
-        """Print a simple list of permissions."""
+        """パーミッションのシンプルなリストを表示する。"""
         if not permissions:
             return
 
@@ -262,7 +271,7 @@ class StyledOutput:
         ))
 
     def print_warnings(self, warnings: List[str], max_show: int = 5) -> None:
-        """Print warnings panel."""
+        """警告パネルを表示する。"""
         if not warnings:
             return
 
@@ -297,7 +306,7 @@ class StyledOutput:
         total_int: int,
         output_file: str,
     ) -> None:
-        """Print the final invite link panel."""
+        """招待リンクパネルを表示する。"""
         if self.plain:
             print("\n" + "=" * 50)
             print("INVITE LINK")
@@ -344,7 +353,7 @@ class StyledOutput:
         user_count: int,
         total_int: int,
     ) -> None:
-        """Print a summary of detected permissions."""
+        """検出されたパーミッションのサマリーを表示する。"""
         if self.plain:
             print("\nSummary:")
             print(f"  Method-based (PRIMARY): {inferred_count} permissions")
@@ -384,7 +393,7 @@ class StyledOutput:
         self.console.print(table)
 
     def print_error(self, message: str) -> None:
-        """Print an error message."""
+        """エラーメッセージを表示する。"""
         if self.plain:
             print(f"Error: {message}", file=sys.stderr)
             return
@@ -392,9 +401,69 @@ class StyledOutput:
         self.console.print(f"[bold red]Error:[/] {message}", style="red")
 
     def print_success(self, message: str) -> None:
-        """Print a success message."""
+        """成功メッセージを表示する。"""
         if self.plain:
             print(message)
             return
 
         self.console.print(f"[bold green]{message}[/]")
+
+    def check_version_with_spinner(self) -> Optional[Tuple[str, str]]:
+        """
+        スピナーアニメーション付きでバージョンチェックを実行する。
+
+        Returns:
+            更新がある場合: (現在のバージョン, 最新バージョン) のタプル
+            最新版またはチェック失敗時: None
+        """
+        from .version_check import check_for_updates
+
+        if self.plain:
+            return check_for_updates()
+
+        from rich.live import Live
+        from rich.spinner import Spinner
+
+        spinner = Spinner("dots", text="[dim]アップデートを確認中...[/]", style="cyan")
+
+        with Live(spinner, console=self.console, transient=True, refresh_per_second=10):
+            return check_for_updates()
+
+    def print_update_notice(self, current_version: str, latest_version: str) -> None:
+        """
+        新しいバージョンがリリースされている場合の通知を表示する。
+
+        Args:
+            current_version: 現在のバージョン
+            latest_version: 最新バージョン
+        """
+        if self.plain:
+            print()
+            print("=" * 50)
+            print("  新しいバージョンがリリースされています!")
+            print(f"  現在: v{current_version} → 最新: v{latest_version}")
+            print("  更新: pip install --upgrade mper")
+            print("=" * 50)
+            print()
+            return
+
+        from rich.align import Align
+
+        content = (
+            "[bold yellow]✨ 新しいバージョンがリリースされています! ✨[/]\n\n"
+            f"[dim]現在:[/] [bold red]v{current_version}[/]"
+            f"  [bold white]→[/]  "
+            f"[dim]最新:[/] [bold green]v{latest_version}[/]\n\n"
+            "[dim]更新コマンド:[/]\n"
+            "[bold cyan underline]  pip install --upgrade mper[/]"
+        )
+
+        self.console.print()
+        self.console.print(Panel(
+            Align.center(content),
+            title="[bold yellow]📦 Update Available[/]",
+            subtitle="[dim]https://pypi.org/project/mper/[/]",
+            box=box.DOUBLE,
+            border_style="yellow",
+            padding=(1, 2),
+        ))

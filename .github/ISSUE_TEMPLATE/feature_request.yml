@@ -1,0 +1,51 @@
+name: 機能要望
+description: 新機能や改善を提案する
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        機能要望ありがとうございます！以下の項目を記入してください。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 解決したい問題
+      description: この機能が解決する問題は何ですか？
+      placeholder: "例: 大規模なプロジェクトをスキャンする際に時間がかかる"
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 提案する解決策
+      description: どのような機能があれば解決できますか？
+      placeholder: 具体的な提案を記入してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 検討した代替案
+      description: 他に検討した解決策があれば教えてください
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 重要度
+      description: この機能はどのくらい重要ですか？
+      options:
+        - 低 - あれば便利
+        - 中 - 結構欲しい
+        - 高 - ぜひ欲しい
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 追加情報
+      description: スクリーンショット、参考リンク、コード例などがあれば追加してください

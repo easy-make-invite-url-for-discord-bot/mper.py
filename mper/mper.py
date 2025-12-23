@@ -1,29 +1,20 @@
 """
-mper.py - Discord Bot Permission Scanner
+mper - Discord Bot Permission Scanner
 
-Scans Python code to detect required Discord permissions and generates
-bot invite links with the appropriate permission bits.
+Pythonコードをスキャンして必要なDiscordパーミッションを検出し、
+Bot招待リンクを生成する。
 
-Detection methods (in order of priority):
+検出方法（優先度順）:
+    1. メソッドベース検出 (PRIMARY)
+       - discord.pyのメソッド呼び出しからBotパーミッションを推測
+       - 例: member.ban() -> ban_members
 
-1. Method-based detection (PRIMARY - for invite link):
-   - Detects discord.py method calls and infers required BOT permissions
-   - e.g., member.ban() -> ban_members, channel.purge() -> manage_messages
-   - Tracks call sites (file, line, method) as evidence
-   - Uses receiver type hints for better accuracy (member.ban vs guild.ban)
+    2. @bot_has_permissionsデコレータ (SUPPLEMENTARY)
+       - 開発者による明示的なBotパーミッション宣言
 
-2. @bot_has_permissions decorator (SUPPLEMENTARY):
-   - Explicit bot permission declarations by the developer
-   - Added to invite link permissions
-
-3. @has_permissions decorator (USER REQUIREMENTS ONLY):
-   - These are USER permission requirements, NOT bot permissions
-   - NOT included in invite link (user permissions != bot permissions)
-   - Shown in report for reference only
-
-The invite link is generated from:
-- Method-based inferred permissions (what the bot actually does)
-- @bot_has_permissions declarations (explicit bot requirements)
+    3. @has_permissionsデコレータ (REFERENCE ONLY)
+       - ユーザーパーミッション要件（Botパーミッションではない）
+       - 招待リンクには含まれない
 """
 
 import argparse
@@ -50,7 +41,18 @@ from .permissions import (
 
 @dataclass
 class MethodCall:
-    """Represents a detected method call that requires permissions."""
+    """
+    パーミッションが必要なメソッド呼び出しを表すデータクラス。
+
+    Attributes:
+        method_name: メソッド名
+        receiver_hint: レシーバーの型ヒント
+        line_number: 行番号
+        permissions: 必要なパーミッションリスト
+        confidence: 信頼度 (high/medium/low)
+        description: 説明
+        kwargs: キーワード引数
+    """
     method_name: str
     receiver_hint: Optional[str]
     line_number: int
@@ -66,8 +68,8 @@ class MethodCall:
             return f"{self.receiver_hint}.{self.method_name}"
         return self.method_name
 
-# Directories to exclude by default
-DEFAULT_EXCLUDE_DIRS = {
+# デフォルトで除外するディレクトリ
+DEFAULT_EXCLUDE_DIRS: Set[str] = {
     '.venv',
     'venv',
     '.env',
@@ -90,11 +92,13 @@ DEFAULT_EXCLUDE_DIRS = {
 
 
 class PermissionVisitor(ast.NodeVisitor):
-    """AST visitor to extract permission requirements from Python code.
+    """
+    Pythonコードからパーミッション要件を抽出するASTビジター。
 
-    PRIMARY detection: Method calls (what the bot actually does)
-    SUPPLEMENTARY: @bot_has_permissions decorators (explicit declarations)
-    REFERENCE ONLY: @has_permissions decorators (user requirements, not for invite)
+    検出カテゴリ:
+        - PRIMARY: メソッド呼び出し（招待リンク用）
+        - SUPPLEMENTARY: @bot_has_permissionsデコレータ
+        - REFERENCE ONLY: @has_permissionsデコレータ（ユーザー要件）
     """
 
     def __init__(self, file_path: str = ""):
@@ -285,17 +289,20 @@ class PermissionVisitor(ast.NodeVisitor):
 
 def scan_file(file_path: str) -> Dict[str, Any]:
     """
-    Scan a single Python file for permission requirements.
+    単一のPythonファイルをスキャンしてパーミッション要件を検出する。
+
+    Args:
+        file_path: スキャン対象のファイルパス
 
     Returns:
-        Dictionary containing:
-        - method_calls: List of MethodCall objects (PRIMARY - for invite link)
-        - inferred_permissions: Set of permissions from method calls (PRIMARY)
-        - bot_permissions: Set from @bot_has_permissions (SUPPLEMENTARY)
-        - user_permissions: Set from @has_permissions (REFERENCE ONLY)
-        - invite_link_permissions: Combined permissions for invite link
-        - evidence: Dict mapping permission -> list of method calls
-        - warnings: List of warning messages
+        検出結果の辞書:
+            - method_calls: MethodCallオブジェクトのリスト
+            - inferred_permissions: メソッドから推測されたパーミッション
+            - bot_permissions: @bot_has_permissionsからのパーミッション
+            - user_permissions: @has_permissionsからのパーミッション
+            - invite_link_permissions: 招待リンク用パーミッション
+            - evidence: パーミッションごとの証拠
+            - warnings: 警告メッセージ
     """
     empty_result = {
         'method_calls': [],
@@ -339,30 +346,21 @@ def scan_file(file_path: str) -> Dict[str, Any]:
 
 def scan_directory(
     directory: str,
-    exclude_dirs: Set[str] = None,
+    exclude_dirs: Optional[Set[str]] = None,
     include_inferred: bool = True,
-    verbose: bool = False
+    verbose: bool = False,
 ) -> Dict[str, Any]:
     """
-    Scan a directory for Discord permission requirements.
+    ディレクトリをスキャンしてDiscordパーミッション要件を検出する。
 
     Args:
-        directory: Path to the directory to scan
-        exclude_dirs: Set of directory names to exclude
-        include_inferred: Whether to include inferred permissions (always True for method-based)
-        verbose: Whether to print detailed output
+        directory: スキャン対象のディレクトリパス
+        exclude_dirs: 除外するディレクトリ名のセット
+        include_inferred: 推測パーミッションを含めるか
+        verbose: 詳細出力を行うか
 
     Returns:
-        Dictionary containing:
-        - method_calls: List of all MethodCall objects with file paths
-        - inferred_permissions: Set of permissions from method calls (PRIMARY)
-        - bot_permissions: Set from @bot_has_permissions (SUPPLEMENTARY)
-        - user_permissions: Set from @has_permissions (REFERENCE ONLY)
-        - invite_link_permissions: Combined permissions for invite link
-        - evidence: Dict mapping permission -> list of (file, method_call) tuples
-        - warnings: List of warning messages
-        - files_scanned: Number of files scanned
-        - files_with_errors: Number of files with errors
+        検出結果の辞書
     """
     if exclude_dirs is None:
         exclude_dirs = DEFAULT_EXCLUDE_DIRS
@@ -431,14 +429,14 @@ def scan_directory_with_progress(
     directory: str,
     exclude_dirs: Set[str],
     include_inferred: bool,
-    progress,
-    task_id,
-    python_files: List[str]
+    progress: Any,
+    task_id: Any,
+    python_files: List[str],
 ) -> Dict[str, Any]:
     """
-    Scan a directory with progress bar support.
+    プログレスバー付きでディレクトリをスキャンする。
 
-    This is a variant of scan_directory that updates a Rich progress bar.
+    Richのプログレスバーを更新しながらスキャンを実行する。
     """
     all_method_calls: List[Tuple[str, MethodCall]] = []
     user_permissions: Set[str] = set()
@@ -494,25 +492,25 @@ def scan_directory_with_progress(
 
 
 def calculate_permissions(permission_names: Set[str]) -> int:
-    """Calculate the combined permission integer from permission names."""
+    """パーミッション名から統合パーミッション整数を計算する。"""
     return calculate_permission_integer(permission_names)
 
 
 def create_invite_link(
     client_id: str,
     permissions: int,
-    scopes: List[str] = None
+    scopes: Optional[List[str]] = None,
 ) -> str:
     """
-    Create a Discord bot invite link.
+    Discord Bot招待リンクを生成する。
 
     Args:
-        client_id: The bot's client ID
-        permissions: The permission integer
-        scopes: List of OAuth2 scopes (default: ['bot', 'applications.commands'])
+        client_id: BotのクライアントID
+        permissions: パーミッション整数
+        scopes: OAuth2スコープのリスト
 
     Returns:
-        The invite URL
+        招待URL
     """
     if scopes is None:
         scopes = ['bot', 'applications.commands']
@@ -559,14 +557,23 @@ def generate_invite_url(
     return create_invite_link(client_id, permissions, scopes)
 
 
-def write_invite_link_to_file(invite_link: str, file_path: str = 'bot_invite_url.txt') -> None:
-    """Write the invite link to a file."""
+def write_invite_link_to_file(invite_link: str, file_path: str = "bot_invite_url.txt") -> None:
+    """招待リンクをファイルに書き込む。"""
     with open(file_path, 'a') as file:
         file.write(invite_link + '\n')
 
 
-def format_permissions_report(result: Dict, show_evidence: bool = True) -> str:
-    """Format a human-readable permissions report with evidence."""
+def format_permissions_report(result: Dict[str, Any], show_evidence: bool = True) -> str:
+    """
+    パーミッションレポートを人間が読める形式でフォーマットする。
+
+    Args:
+        result: scan_directory/scan_fileの結果
+        show_evidence: 証拠を表示するか
+
+    Returns:
+        フォーマットされたレポート文字列
+    """
     lines = []
     lines.append("=" * 70)
     lines.append("Discord Bot Permission Scan Report")
@@ -733,10 +740,13 @@ Examples:
     from .cli_output import StyledOutput
     output = StyledOutput(no_color=args.no_color, plain=args.plain)
 
-    # Print banner
+    # バナー表示
     output.print_banner()
 
-    # Validate directory
+    # バージョンチェック
+    update_info = output.check_version_with_spinner()
+
+    # ディレクトリの検証
     if not os.path.isdir(args.directory):
         output.print_error(f"'{args.directory}' is not a valid directory")
         sys.exit(1)
@@ -836,6 +846,10 @@ Examples:
         total_permissions,
         args.output
     )
+
+    # アップデート通知
+    if update_info:
+        output.print_update_notice(*update_info)
 
 
 if __name__ == "__main__":

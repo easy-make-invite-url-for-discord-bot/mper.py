@@ -1,30 +1,64 @@
-# mper.py
+# mper
 
-Discord bot permission scanner - Analyzes discord.py code to detect required permissions and generate invite links.
+[![PyPI version](https://badge.fury.io/py/mper.svg)](https://badge.fury.io/py/mper)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-discord.pyボットのコードを解析し、必要な権限を検出して招待リンクを生成するツールです。
+**Discord Bot Permission Scanner** - discord.pyのコードを解析し、必要なパーミッションを検出して招待リンクを生成するツール。
 
-## Features / 機能
+## 特徴
 
-- **Method-based detection (PRIMARY)**: Detects discord.py method calls (`.ban()`, `.kick()`, `.send()`, etc.) and infers required BOT permissions
-- **Evidence tracking**: Shows which method calls at which lines require which permissions
-- **All 49 Discord permissions**: Supports all Discord API permissions (as of 2025-12-22)
-- **Context-aware detection**: Handles `member.edit(nick=...)`, `member.edit(mute=...)`, etc.
-- **Decorator support**: `@bot_has_permissions` (supplementary), `@has_permissions` (user requirements only)
+| 機能 | 説明 |
+|------|------|
+| **メソッドベース検出** | `.ban()`, `.kick()`, `.send()` などのメソッド呼び出しからBotパーミッションを自動推測 |
+| **証拠トラッキング** | どのファイルの何行目でどのパーミッションが必要かを表示 |
+| **全49パーミッション対応** | Discord APIの全パーミッションをサポート |
+| **コンテキスト認識** | `member.edit(nick=...)` と `member.edit(mute=...)` を区別 |
+| **デコレータサポート** | `@bot_has_permissions`（補助）、`@has_permissions`（ユーザー要件のみ） |
+| **アップデート通知** | 新しいバージョンがリリースされた際にCLIで通知 |
 
-## Installation / インストール方法
+## インストール
 
-```sh
+```bash
 pip install mper
 ```
 
-## Usage / 使い方
+## 使い方
 
 ### CLI
 
-```sh
+```bash
+# 基本的な使い方
 mper /path/to/bot/directory CLIENT_ID
+
+# 詳細レポート付き
+mper /path/to/bot/directory CLIENT_ID --report
+
+# 詳細出力
+mper /path/to/bot/directory CLIENT_ID --verbose
+
+# ディレクトリを除外
+mper /path/to/bot/directory CLIENT_ID --exclude tests docs
+
+# カスタムOAuth2スコープ
+mper /path/to/bot/directory CLIENT_ID --scope bot --scope applications.commands
+
+# プレーンテキスト出力（色なし）
+mper /path/to/bot/directory CLIENT_ID --plain
 ```
+
+### CLIオプション
+
+| オプション | 説明 |
+|------------|------|
+| `--report` | 証拠付きの詳細パーミッションレポートを表示 |
+| `--verbose`, `-v` | スキャン中の詳細出力を表示 |
+| `--no-inferred` | デコレータからの宣言パーミッションのみ使用 |
+| `--exclude` | 除外するディレクトリを追加 |
+| `--scope` | 招待リンクのOAuth2スコープ（デフォルト: bot, applications.commands） |
+| `--output`, `-o` | 招待リンクの出力ファイル（デフォルト: bot_invite_url.txt） |
+| `--no-color` | 色付き出力を無効化 |
+| `--plain` | プレーンテキスト出力（スタイルなし） |
 
 ### ライブラリとして使用
 
@@ -40,7 +74,7 @@ result = mper.scan_directory("./my_bot")
 print(f"検出されたパーミッション: {result['invite_link_permissions']}")
 
 # パーミッション名から整数値を計算
-perm_int = mper.calculate_permission_integer(['send_messages', 'ban_members'])
+perm_int = mper.calculate_permission_integer({'send_messages', 'ban_members'})
 
 # カスタム招待URLを作成
 url = mper.create_invite_link(
@@ -52,84 +86,73 @@ url = mper.create_invite_link(
 
 詳細な使用例は [examples/](examples/) を参照してください。
 
-### CLI Examples / 例
-
-```sh
-# Basic usage
-mper /home/user/my_discord_bot 123456789012345678
-
-# With detailed report
-mper /home/user/my_discord_bot 123456789012345678 --report
-
-# Verbose output
-mper /home/user/my_discord_bot 123456789012345678 --verbose
-
-# Exclude directories
-mper /home/user/my_discord_bot 123456789012345678 --exclude tests docs
-
-# Custom OAuth2 scopes
-mper /home/user/my_discord_bot 123456789012345678 --scope bot --scope applications.commands
-```
-
-### CLI Options / オプション
-
-| Option | Description |
-|--------|-------------|
-| `--report` | Print detailed permissions report with evidence |
-| `--verbose`, `-v` | Show detailed output during scanning |
-| `--no-inferred` | Only use declared permissions (from decorators) |
-| `--exclude` | Additional directories to exclude |
-| `--scope` | OAuth2 scopes for invite link (default: bot, applications.commands) |
-| `--output`, `-o` | Output file for invite link (default: bot_invite_url.txt) |
-
-### Output Example / 出力例
+### 出力例
 
 ```
-======================================================================
-DETECTED PERMISSIONS (from method calls - PRIMARY)
-----------------------------------------------------------------------
+╭──────────────────────────────────────────────────╮
+│  mper - Discord Bot Permission Scanner           │
+╰──────────────────────────────────────────────────╯
 
-ban_members (0x4):
-  bot.py:15 -> member.ban()
-    [high] Ban a member from the guild
+Scanning: /path/to/bot
+Scanned 5 files (0 with errors)
 
-manage_messages (0x2000):
-  bot.py:25 -> channel.purge()
-    [high] Bulk delete messages
+┌─────────────────────────────────────────────────┐
+│ Detected Permissions (from method calls)        │
+├─────────────────┬───────────┬───────────────────┤
+│ Permission      │ Bit Value │ Evidence          │
+├─────────────────┼───────────┼───────────────────┤
+│ ban_members     │ 0x4       │ bot.py:15         │
+│ manage_messages │ 0x2000    │ bot.py:25         │
+│ send_messages   │ 0x800     │ bot.py:10, 20, 30 │
+└─────────────────┴───────────┴───────────────────┘
 
-======================================================================
-INVITE LINK PERMISSIONS
-======================================================================
-Source: method-based detection + @bot_has_permissions
-
-  Permissions: ban_members, manage_messages, send_messages
-  Integer: 10246
-  Hex: 0x2806
+╔══════════════════════════════════════════════════╗
+║ 🔗 INVITE LINK                                   ║
+╠══════════════════════════════════════════════════╣
+║ https://discord.com/oauth2/authorize?...         ║
+╚══════════════════════════════════════════════════╝
 ```
 
-## How It Works / 仕組み
+## 仕組み
 
-1. **Method-based detection (PRIMARY)**: Scans Python AST for discord.py method calls and maps them to required permissions
-2. **`@bot_has_permissions` (SUPPLEMENTARY)**: Explicit bot permission declarations are added to invite link
-3. **`@has_permissions` (REFERENCE ONLY)**: User permission requirements are shown in report but NOT included in invite link
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    mper スキャンプロセス                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. メソッドベース検出 (PRIMARY)                              │
+│     Python AST解析 → discord.pyメソッド検出 → パーミッション推測 │
+│     例: member.ban() → ban_members                          │
+│                                                             │
+│  2. @bot_has_permissions (SUPPLEMENTARY)                    │
+│     明示的なBot権限宣言 → 招待リンクに追加                     │
+│                                                             │
+│  3. @has_permissions (REFERENCE ONLY)                       │
+│     ユーザー権限要件 → レポートに表示のみ（招待リンクには不含）  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
-## Supported Permissions / 対応権限
+## 対応パーミッション
 
-All 49 Discord permissions are supported (bits 0-46, 49-50). See [Discord API Documentation](https://discord.com/developers/docs/topics/permissions) for details.
+Discord APIの全49パーミッション（ビット0-46, 49-50）に対応しています。
 
-## License / ライセンス
+詳細は [Discord API Documentation](https://discord.com/developers/docs/topics/permissions) を参照してください。
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+## ライセンス
 
-このツールはMITライセンスのもとで公開されています。複製、編集、再公開は基本的に全て許可されています。
+MIT License - 詳細は [LICENSE](LICENSE) を参照してください。
 
-## Issues / 質問や不具合の報告
+## Issues
 
-Please create issues with appropriate tags:
-- `bug` - Bug reports / バグ報告
-- `enhancement` - Feature requests / 要望
-- `question` - Questions / 質問
+問題や要望がある場合は、適切なタグを付けてIssueを作成してください：
 
-## Credits / クレジット
+| タグ | 用途 |
+|------|------|
+| `bug` | バグ報告 |
+| `enhancement` | 機能要望 |
+| `question` | 質問 |
 
-- Developer: [@FreeWiFi7749](https://github.com/FreeWiFi7749)
+## クレジット
+
+- 開発者: [@FreeWiFi7749](https://github.com/FreeWiFi7749)

@@ -1,0 +1,41 @@
+name: 質問
+description: mperの使い方について質問する
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        質問ありがとうございます！以下の項目を記入してください。
+
+  - type: textarea
+    id: question
+    attributes:
+      label: 質問内容
+      description: 何について知りたいですか？
+      placeholder: できるだけ具体的に記入してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: 試したこと
+      description: すでに試したことがあれば教えてください
+      placeholder: |
+        - READMEを確認した
+        - `mper --help` を実行した
+        - ...
+
+  - type: textarea
+    id: context
+    attributes:
+      label: 背景・コンテキスト
+      description: 質問の背景や、何をしようとしているかを教えてください
+
+  - type: input
+    id: mper-version
+    attributes:
+      label: mperのバージョン
+      description: "`pip show mper` で確認できます（該当する場合）"
+      placeholder: "例: 1.1.1"
