@@ -118,12 +118,14 @@ class StyledOutput:
         banner_text.append("  mper", style="bold cyan")
         banner_text.append(" - Discord Bot Permission Scanner", style="white")
 
-        self.console.print(Panel(
-            banner_text,
-            box=box.ROUNDED,
-            border_style="cyan",
-            padding=(0, 2),
-        ))
+        self.console.print(
+            Panel(
+                banner_text,
+                box=box.ROUNDED,
+                border_style="cyan",
+                padding=(0, 2),
+            )
+        )
         self.console.print()
 
     def create_progress(self) -> Optional[Progress]:
@@ -186,6 +188,7 @@ class StyledOutput:
                 print(f"  {perm} (0x{value:X}) - {len(calls)} call(s)")
                 for file_path, call in calls[:3]:  # Show max 3 examples
                     import os
+
                     rel_path = os.path.basename(file_path)
                     print(f"    {rel_path}:{call.line_number} -> {call.call_chain}()")
                 if len(calls) > 3:
@@ -214,6 +217,7 @@ class StyledOutput:
             # Get first source as example
             if calls:
                 import os
+
                 file_path, call = calls[0]
                 rel_path = os.path.basename(file_path)
                 source = f"{rel_path}:{call.line_number}"
@@ -262,13 +266,15 @@ class StyledOutput:
             panel_content = f"[dim]{subtitle}[/]\n\n" + panel_content
 
         self.console.print()
-        self.console.print(Panel(
-            panel_content,
-            title=f"[bold]{title}[/]",
-            box=box.ROUNDED,
-            border_style=style,
-            padding=(1, 2),
-        ))
+        self.console.print(
+            Panel(
+                panel_content,
+                title=f"[bold]{title}[/]",
+                box=box.ROUNDED,
+                border_style=style,
+                padding=(1, 2),
+            )
+        )
 
     def print_warnings(self, warnings: List[str], max_show: int = 5) -> None:
         """警告パネルを表示する。"""
@@ -291,13 +297,15 @@ class StyledOutput:
             content.append(f"[dim]... and {len(warnings) - max_show} more[/]")
 
         self.console.print()
-        self.console.print(Panel(
-            "\n".join(content),
-            title="[bold yellow]Warnings[/]",
-            box=box.ROUNDED,
-            border_style="yellow",
-            padding=(1, 2),
-        ))
+        self.console.print(
+            Panel(
+                "\n".join(content),
+                title="[bold yellow]Warnings[/]",
+                box=box.ROUNDED,
+                border_style="yellow",
+                padding=(1, 2),
+            )
+        )
 
     def print_invite_link(
         self,
@@ -337,13 +345,15 @@ class StyledOutput:
         content.append(output_file, style="cyan")
 
         self.console.print()
-        self.console.print(Panel(
-            content,
-            title="[bold green]Invite Link[/]",
-            box=box.DOUBLE,
-            border_style="green",
-            padding=(1, 2),
-        ))
+        self.console.print(
+            Panel(
+                content,
+                title="[bold green]Invite Link[/]",
+                box=box.DOUBLE,
+                border_style="green",
+                padding=(1, 2),
+            )
+        )
         self.console.print()
 
     def print_summary(
@@ -459,11 +469,13 @@ class StyledOutput:
         )
 
         self.console.print()
-        self.console.print(Panel(
-            Align.center(content),
-            title="[bold yellow]📦 Update Available[/]",
-            subtitle="[dim]https://pypi.org/project/mper/[/]",
-            box=box.DOUBLE,
-            border_style="yellow",
-            padding=(1, 2),
-        ))
+        self.console.print(
+            Panel(
+                Align.center(content),
+                title="[bold yellow]📦 Update Available[/]",
+                subtitle="[dim]https://pypi.org/project/mper/[/]",
+                box=box.DOUBLE,
+                border_style="yellow",
+                padding=(1, 2),
+            )
+        )

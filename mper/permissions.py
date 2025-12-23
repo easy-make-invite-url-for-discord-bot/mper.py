@@ -99,14 +99,12 @@ METHOD_PERMISSION_RULES: Dict[str, Tuple[List[str], str, str]] = {
     "member.kick": (["kick_members"], "high", "Kick a member from the guild"),
     "guild.kick": (["kick_members"], "high", "Kick a user from the guild"),
     "member.timeout": (["moderate_members"], "high", "Timeout a member"),
-
     # Role operations (high confidence - documented)
     "member.add_roles": (["manage_roles"], "high", "Add roles to a member"),
     "member.remove_roles": (["manage_roles"], "high", "Remove roles from a member"),
     "guild.create_role": (["manage_roles"], "high", "Create a new role"),
     "role.delete": (["manage_roles"], "high", "Delete a role"),
     "role.edit": (["manage_roles"], "high", "Edit a role"),
-
     # Channel operations (high confidence - documented)
     "guild.create_text_channel": (["manage_channels"], "high", "Create a text channel"),
     "guild.create_voice_channel": (["manage_channels"], "high", "Create a voice channel"),
@@ -117,40 +115,37 @@ METHOD_PERMISSION_RULES: Dict[str, Tuple[List[str], str, str]] = {
     "channel.edit": (["manage_channels"], "medium", "Edit channel settings"),
     "channel.clone": (["manage_channels"], "high", "Clone a channel"),
     "channel.set_permissions": (["manage_roles"], "high", "Set channel permission overwrites"),
-
     # Message operations (high confidence - documented)
     "channel.purge": (["manage_messages", "read_message_history"], "high", "Bulk delete messages"),
     "message.pin": (["manage_messages"], "high", "Pin a message"),
     "message.unpin": (["manage_messages"], "high", "Unpin a message"),
     "message.clear_reactions": (["manage_messages"], "high", "Clear all reactions"),
-    "message.publish": (["send_messages", "manage_messages"], "high", "Publish announcement message"),
-
+    "message.publish": (
+        ["send_messages", "manage_messages"],
+        "high",
+        "Publish announcement message",
+    ),
     # Webhook operations (high confidence - documented)
     "channel.create_webhook": (["manage_webhooks"], "high", "Create a webhook"),
     "channel.webhooks": (["manage_webhooks"], "high", "List channel webhooks"),
     "guild.webhooks": (["manage_webhooks"], "high", "List guild webhooks"),
     "webhook.delete": (["manage_webhooks"], "high", "Delete a webhook"),
     "webhook.edit": (["manage_webhooks"], "high", "Edit a webhook"),
-
     # Thread operations (high confidence - documented)
     "channel.create_thread": (["create_public_threads"], "high", "Create a public thread"),
     "thread.delete": (["manage_threads"], "high", "Delete a thread"),
     "thread.edit": (["manage_threads"], "medium", "Edit thread settings"),
     "thread.archive": (["manage_threads"], "high", "Archive a thread"),
     "thread.unarchive": (["manage_threads"], "high", "Unarchive a thread"),
-
     # Voice operations (high confidence - documented)
     "member.move_to": (["move_members"], "high", "Move member to voice channel"),
-
     # Invite operations (high confidence - documented)
     "channel.create_invite": (["create_instant_invite"], "high", "Create an invite"),
     "guild.invites": (["manage_guild"], "high", "List guild invites"),
     "guild.vanity_invite": (["manage_guild"], "high", "Get vanity invite"),
-
     # Audit log operations (high confidence - documented)
     "guild.audit_logs": (["view_audit_log"], "high", "View audit logs"),
     "guild.fetch_audit_logs": (["view_audit_log"], "high", "Fetch audit logs"),
-
     # Emoji/Sticker operations (high confidence - documented)
     "guild.create_custom_emoji": (["manage_guild_expressions"], "high", "Create custom emoji"),
     "guild.delete_emoji": (["manage_guild_expressions"], "high", "Delete custom emoji"),
@@ -159,12 +154,10 @@ METHOD_PERMISSION_RULES: Dict[str, Tuple[List[str], str, str]] = {
     "guild.create_sticker": (["manage_guild_expressions"], "high", "Create sticker"),
     "sticker.delete": (["manage_guild_expressions"], "high", "Delete sticker"),
     "sticker.edit": (["manage_guild_expressions"], "high", "Edit sticker"),
-
     # Event operations (high confidence - documented)
     "guild.create_scheduled_event": (["manage_events"], "high", "Create scheduled event"),
     "scheduledevent.delete": (["manage_events"], "high", "Delete scheduled event"),
     "scheduledevent.edit": (["manage_events"], "high", "Edit scheduled event"),
-
     # Guild operations (high confidence - documented)
     "guild.edit": (["manage_guild"], "high", "Edit guild settings"),
     "guild.create_template": (["manage_guild"], "high", "Create guild template"),
@@ -195,31 +188,26 @@ SIMPLE_METHOD_PERMISSIONS: Dict[str, Tuple[List[str], str, str]] = {
     "prune_members": (["kick_members"], "high", "Prune members"),
     "move_to": (["move_members"], "high", "Move to voice channel"),
     "set_permissions": (["manage_roles"], "high", "Set channel permissions"),
-
     # Medium confidence - context dependent
     "send": (["send_messages"], "medium", "Send message (guild channels only)"),
     "delete": (["manage_messages"], "low", "Delete message (others' messages only)"),
     "create_thread": (["create_public_threads"], "medium", "Create thread"),
     "archive": (["manage_threads"], "medium", "Archive thread"),
     "unarchive": (["manage_threads"], "medium", "Unarchive thread"),
-
     # Channel creation
     "create_text_channel": (["manage_channels"], "high", "Create text channel"),
     "create_voice_channel": (["manage_channels"], "high", "Create voice channel"),
     "create_category": (["manage_channels"], "high", "Create category"),
     "create_stage_channel": (["manage_channels"], "high", "Create stage channel"),
     "create_forum": (["manage_channels"], "high", "Create forum"),
-
     # Emoji/Sticker
     "create_custom_emoji": (["manage_guild_expressions"], "high", "Create emoji"),
     "delete_emoji": (["manage_guild_expressions"], "high", "Delete emoji"),
     "create_sticker": (["manage_guild_expressions"], "high", "Create sticker"),
     "delete_sticker": (["manage_guild_expressions"], "high", "Delete sticker"),
-
     # Events
     "create_scheduled_event": (["manage_events"], "high", "Create event"),
     "delete_scheduled_event": (["manage_events"], "high", "Delete event"),
-
     # Reactions
     "add_reaction": (["add_reactions", "read_message_history"], "medium", "Add reaction"),
 }
@@ -321,8 +309,7 @@ def get_permission_value(name: str) -> Optional[int]:
 
 
 def get_permissions_from_method(
-    method_name: str,
-    receiver_hint: str = None
+    method_name: str, receiver_hint: str = None
 ) -> Tuple[List[str], str, str]:
     """
     Get likely required permissions for a discord.py method call.
