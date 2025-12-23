@@ -20,11 +20,39 @@ pip install mper
 
 ## Usage / 使い方
 
+### CLI
+
 ```sh
 mper /path/to/bot/directory CLIENT_ID
 ```
 
-### Examples / 例
+### ライブラリとして使用
+
+```python
+import mper
+
+# 簡単に招待URLを生成（CLIと同じ動作）
+url = mper.generate_invite_url("./my_bot", client_id="123456789012345678")
+print(url)
+
+# 詳細なスキャン結果を取得
+result = mper.scan_directory("./my_bot")
+print(f"検出されたパーミッション: {result['invite_link_permissions']}")
+
+# パーミッション名から整数値を計算
+perm_int = mper.calculate_permission_integer(['send_messages', 'ban_members'])
+
+# カスタム招待URLを作成
+url = mper.create_invite_link(
+    client_id="123456789012345678",
+    permissions=perm_int,
+    scopes=['bot', 'applications.commands']
+)
+```
+
+詳細な使用例は [examples/](examples/) を参照してください。
+
+### CLI Examples / 例
 
 ```sh
 # Basic usage
