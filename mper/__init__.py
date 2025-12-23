@@ -9,6 +9,7 @@ __version__ = "1.0.0"
 from .mper import (
     create_invite_link,
     format_permissions_report,
+    generate_invite_url,
     scan_directory,
     scan_file,
 )
@@ -30,5 +31,6 @@ __all__ = [
     "scan_file",
     "scan_directory",
     "create_invite_link",
+    "generate_invite_url",
     "format_permissions_report",
 ]

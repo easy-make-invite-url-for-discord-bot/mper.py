@@ -521,6 +521,41 @@ def create_invite_link(
     return f"https://discord.com/oauth2/authorize?client_id={client_id}&permissions={permissions}&scope={scope_str}"
 
 
+def generate_invite_url(
+    path: str,
+    client_id: str,
+    scopes: List[str] = None
+) -> str:
+    """
+    ディレクトリまたはファイルをスキャンして、必要なパーミッションを自動検出し招待URLを生成する。
+
+    CLIと同じ動作をライブラリから簡単に実行できる。
+
+    Args:
+        path: スキャン対象のディレクトリまたはファイルのパス
+        client_id: BotのクライアントID
+        scopes: OAuth2スコープのリスト（デフォルト: ['bot', 'applications.commands']）
+
+    Returns:
+        生成された招待URL
+
+    Example:
+        >>> import mper
+        >>> url = mper.generate_invite_url("./my_bot", client_id="123456789")
+        >>> print(url)
+    """
+    import os
+
+    if os.path.isfile(path):
+        result = scan_file(path)
+    else:
+        result = scan_directory(path)
+
+    permission_names = result['invite_link_permissions']
+    permissions = calculate_permission_integer(permission_names)
+    return create_invite_link(client_id, permissions, scopes)
+
+
 def write_invite_link_to_file(invite_link: str, file_path: str = 'bot_invite_url.txt') -> None:
     """Write the invite link to a file."""
     with open(file_path, 'a') as file:
