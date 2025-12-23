@@ -4,7 +4,7 @@ mper - Discord bot permission scanner
 Analyzes discord.py code to detect required permissions and generate invite links.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from .mper import (
     create_invite_link,
